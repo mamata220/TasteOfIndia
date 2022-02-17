@@ -1,4 +1,3 @@
-import time
 import timeit
 
 from selenium import webdriver
@@ -13,8 +12,6 @@ import logging
 import platform
 import pandas as pd
 
-logger = logging.getLogger(__name__)
-
 start = timeit.default_timer()
 chrome_options = Options()
 chrome_options.add_argument("--headless")
@@ -24,7 +21,8 @@ driver = webdriver.Chrome(ChromeDriverManager().install(), chrome_options=chrome
 driver.maximize_window()
 baseUrl = "https://www.tarladalal.com/"
 driver.get(baseUrl)
-#driver.implicitly_wait(2)
+
+driver.implicitly_wait(5)
 driver.find_element(By.XPATH, '//a[@href="RecipeAtoZ.aspx"]').click()
 driver.find_element(By.LINK_TEXT, 'A').click()
 
@@ -37,91 +35,93 @@ nutrientValuesDataList = []
 categoryDataList = []
 imageLinkDataList = []
 
-mainHandle = driver.current_window_handle
-pagesAtoZ = driver.find_elements(By.XPATH, '//table[@id="ctl00_cntleftpanel_mnuAlphabets"]//table//a')
-pageNameUrlsArr = []
-# for page in pagesAtoZ:
+pagesAtoZElements = driver.find_elements(By.XPATH, '//table[@id="ctl00_cntleftpanel_mnuAlphabets"]//table//a')
+atoZ28pageNameUrlsLis = []
+# for page in pagesAtoZElements:
 #     pageName = page.get_attribute('text')
 #     pageNameUrl = 'https://www.tarladalal.com/RecipeAtoZ.aspx?beginswith=' + pageName + '&pageindex=1'
-#     pageNameUrlsArr.append(pageNameUrl)
+#     atoZ28pageNameUrlsLis.append(pageNameUrl)
 
-pageNameUrlsArr.append('https://www.tarladalal.com/RecipeAtoZ.aspx?beginswith=Y&pageindex=1')
-print("pageNameUrlsArr:" + str(pageNameUrlsArr))
-# logger.info("pageNameUrlsArr:", str(pageNameUrlsArr))
+atoZ28pageNameUrlsLis.append('https://www.tarladalal.com/RecipeAtoZ.aspx?beginswith=Y&pageindex=1')
+print("pageNameUrlsLis:" + str(atoZ28pageNameUrlsLis))
+
 
 def is_undefined_or_empty(s):
     return bool((s is None) or (str(s).strip() == ""))
 
 
-for page in pageNameUrlsArr:
+# Actual logic to start scraping for the 28 links A to Z, 0-9, Misc pages
+for page in atoZ28pageNameUrlsLis:
     driver.get(page)
     print("After click Current Url: " + driver.current_url)
-    # logger.info("After click Current Url: " + driver.current_url)
 
-    parentGoToPageUrl = driver.current_url
+    mainParentPageUrl = driver.current_url
 
     try:
+        # Skip the Scraping for pages containing no Recipes cards on those pages
         if driver.current_url == 'https://www.tarladalal.com/RecipeAtoZ.aspx?beginswith=0-9&pageindex=1' or \
+                driver.current_url == 'https://www.tarladalal.com/RecipeAtoZ.aspx?beginswith=X&pageindex=1' or \
                 driver.current_url == 'https://www.tarladalal.com/RecipeAtoZ.aspx?beginswith=Misc&pageindex=1':
             print("Skipping current url: " + driver.current_url)
             continue
 
-        lastPageIndexArr = driver.find_elements(By.XPATH, '//div[contains(text(), "Goto Page:")][1]/a')
-        lastPaginationValue = len(lastPageIndexArr)
-        lastPaginationXpath = '//div[contains(text(), "Goto Page:")][1]/a[' + str(lastPaginationValue) + ']'
-        lastPageIndex = driver.find_element(By.XPATH, lastPaginationXpath)
-        lastPageIndexVal = lastPageIndex.text
-        print("Max Pagination size for this: " + lastPageIndexVal)
-        # logger.info("Max Pagination size for this: " + lastPageIndexVal)
+        # Find the Goto pages Last pagination value dynamically, as gotopage hyper links will showup on UI as 1-5 then ... then 9-13 then ... and 18-22
+        allGotoPagesElementsList = driver.find_elements(By.XPATH, '//div[contains(text(), "Goto Page:")][1]/a')
+        allGotoPagesElementsListLength = len(allGotoPagesElementsList)
+        lastPageIndex = driver.find_element(By.XPATH, '//div[contains(text(), "Goto Page:")][1]/a[' + str(
+            allGotoPagesElementsListLength) + ']')
+        goToPagelastPaginationIndexVal = lastPageIndex.text
+        print("Max Pagination size for this: " + goToPagelastPaginationIndexVal)
 
         # Create the list urls for recipe for A to Z
-        urlsListAtoZ = []
-        lastPageIndexToVisit = int(lastPageIndexVal)+1
+        allPaginationUrlsList = []
+        lastPageIndexToVisit = int(goToPagelastPaginationIndexVal) + 1
 
+        # Forloop to generate the 1 to 22 (or 82), pagination urls and store into a list
         for i in range(1, lastPageIndexToVisit):
             # recipeUrl = baseUrl + "RecipeAtoZ.aspx?pageindex=" + str(i)
             recipeUrl = page[0:page.rfind('=')] + "=" + str(i)
-            print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>"+recipeUrl)
-            urlsListAtoZ.append(recipeUrl)
+            print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>" + recipeUrl)
+            allPaginationUrlsList.append(recipeUrl)
 
-        print("urls for receipe A to Z: " + str(urlsListAtoZ))
-        print("urls for receipe A to Z length: " + str(len(urlsListAtoZ)))
+        print("Total no of " + str(len(allPaginationUrlsList)) + " Urls for Pagiantion dynamically build are: " + str(
+            allPaginationUrlsList))
 
-        for urlInAtoZ in urlsListAtoZ:
-            print("Navigating to url: " + urlInAtoZ)
-            driver.get(urlInAtoZ)
-            print("Current Url now: " + driver.current_url)
-            parentGoToPageUrl = driver.current_url
+        # Iterating all the pagination urls captured above and visit that page by using driver.get and start reading individual recipe cards on each page
+        for eachPaginationPage in allPaginationUrlsList:
+            print("Navigating to pagination url: " + eachPaginationPage)
+            driver.get(eachPaginationPage)
+            print("Current Url now after clicking pagination link: " + driver.current_url)
+            mainParentPageUrl = driver.current_url
             allRecipeElementsHyperLink = driver.find_elements(By.XPATH,
                                                               '//div[contains(text(), "Goto Page:")][1]/following-sibling::div[1]//div[@class="rcc_recipecard"]//span[@class="rcc_recipename"]/a')
-            allRecipeElementsHyperLinkHrefArr = []
+            allRecipeElementsHyperLinkHrefList = []
             for hyperLink in allRecipeElementsHyperLink:
-                allRecipeElementsHyperLinkHrefArr.append(hyperLink.get_attribute('href'))
+                allRecipeElementsHyperLinkHrefList.append(hyperLink.get_attribute('href'))
 
             print("All Hyper Links for Recipe on page: " + driver.current_url + " no of links : " + str(
-                len(allRecipeElementsHyperLinkHrefArr)) + " : " + str(allRecipeElementsHyperLinkHrefArr))
-            countHyperLinksOnThePage = 0
+                len(allRecipeElementsHyperLinkHrefList)) + " : " + str(allRecipeElementsHyperLinkHrefList))
+            recipeCardsOnAPageCounter = 0
 
             print("")
             print("Going to read the hyperlinked page recipe.....")
 
-            for eachRecipePage in allRecipeElementsHyperLinkHrefArr:
-                parentHandle = driver.current_window_handle
+            # Going to read the recipe Cards on this page and start actual scrapping for title, ingredients etc"
+            for eachRecipePage in allRecipeElementsHyperLinkHrefList:
+
                 try:
-                    print(">>>>>>>>>> Navigating to page: " + eachRecipePage)
+                    print(">>>>>>>>>> Navigating to recipe page: " + eachRecipePage)
+
+                    # Go to the Actual Recipe page
                     driver.get(eachRecipePage)
 
-                    child_handle = driver.current_window_handle
-                    driver.find_element(By.XPATH, '//div[@id="recipehead"]')
-                    recipeCurrentLink = driver.current_url
-
-                    countHyperLinksOnThePage = countHyperLinksOnThePage + 1
-                    print("countHyperLinksOnThePage: " + str(countHyperLinksOnThePage))
-                    print("recipeCurrentLink: " + recipeCurrentLink)
+                    recipeCardsOnAPageCounter = recipeCardsOnAPageCounter + 1
+                    print("countHyperLinksOnThePage: " + str(recipeCardsOnAPageCounter))
+                    print("Recipe page Link visting now: " + driver.current_url)
 
                     # Skip reading for receipt in the first 3 links (which are decorative item posts) on the first page
-                    if parentGoToPageUrl == 'https://www.tarladalal.com/RecipeAtoZ.aspx?beginswith=A&pageindex=1' and countHyperLinksOnThePage < 4:
-                        print("--------> Going to skip this page : " + driver.current_url)
+                    if mainParentPageUrl == 'https://www.tarladalal.com/RecipeAtoZ.aspx?beginswith=A&pageindex=1' and recipeCardsOnAPageCounter < 4:
+                        print("--------> Going to skip this recipe card page : " + driver.current_url)
                         continue
 
                     print("")
@@ -132,18 +132,18 @@ for page in pageNameUrlsArr:
                     titleDataList.append(titleText)
                     print("**********************************************")
                     print("Title: " + titleText)
-                    ingredientsArr = driver.find_elements(By.XPATH,
-                                                          '//div[@id="rcpinglist"]//span[@itemprop="recipeIngredient"]')
-                    ingredientsArrStrData = []
+                    ingredientsList = driver.find_elements(By.XPATH,
+                                                           '//div[@id="rcpinglist"]//span[@itemprop="recipeIngredient"]')
+                    ingredientsListStrData = []
                     spanText = ""
-                    for v in ingredientsArr:
-                        spanText = v.text
-                        ingredientsArrStrData.append(spanText)
+                    for ingredEle in ingredientsList:
+                        spanText = ingredEle.text
+                        ingredientsListStrData.append(spanText)
 
-                    ingredientsDataList.append(ingredientsArrStrData)
-                    print("ingredients: " + str(ingredientsArrStrData))
+                    ingredientsDataList.append(ingredientsListStrData)
+                    print("ingredients: " + str(ingredientsListStrData))
                     spanText = ""
-                    ingredientsArrStrData = []
+                    ingredientsListStrData = []
 
                     method = driver.find_element(By.XPATH, "//div[@id='ctl00_cntrightpanel_pnlRcpMethod']/div").text
                     method = "" if is_undefined_or_empty(method) else method
@@ -166,7 +166,8 @@ for page in pageNameUrlsArr:
                     category = "" if is_undefined_or_empty(category) else category
                     categoryDataList.append(category)
 
-                    imageLink = driver.find_element(By.XPATH, "//img[@id='ctl00_cntrightpanel_imgRecipe']").get_attribute(
+                    imageLink = driver.find_element(By.XPATH,
+                                                    "//img[@id='ctl00_cntrightpanel_imgRecipe']").get_attribute(
                         "src")
                     print("imageLink: " + imageLink)
                     print("**********************************************")
@@ -205,15 +206,17 @@ scrapedDataDict["imageLink"] = imageLinkDataList
 df = pd.DataFrame(scrapedDataDict)
 stop = timeit.default_timer()
 print("")
-print('Time taken to calculate and store into dataframe: ', stop - start)
+print('Time taken to calculate and store into dataframe: ', str(round((stop - start) / 60, 2)) + " minutes")
 
 # print(df)
 if platform.system() == 'Darwin':
-    df.to_excel('/Users/shibaramsahoo/Dropbox/Mamata NumpyNinja/PyCharm_Windows_WS/TasteOfIndia/output/scrappedfiles/tarladalalRecipes_Y.xlsx')
+    df.to_excel(
+        '/Users/shibaramsahoo/Dropbox/Mamata NumpyNinja/PyCharm_Windows_WS/TasteOfIndia/output/scrappedfiles/tarladalalRecipes_Y.xlsx')
 elif platform.system() == 'Windows':
-    df.to_excel('C:\\Users\\shiba\\Dropbox\\Mamata NumpyNinja\\PyCharm_Windows_WS\\TasteOfIndia\\output\\scrappedfiles\\tarladalalRecipes_Y.xlsx')
+    df.to_excel(
+        'C:\\Users\\shiba\\Dropbox\\Mamata NumpyNinja\\PyCharm_Windows_WS\\TasteOfIndia\\output\\scrappedfiles\\tarladalalRecipes_Y.xlsx')
 
 stop2 = timeit.default_timer()
 print("")
-print('Time taken to write dataframe into Excel: ', stop2 - start)
+print('Time taken to write dataframe into Excel: ', str(round((stop2 - start) / 60, 2)) + " minutes")
 
